@@ -1,0 +1,130 @@
+-- 2. Kolik je možné si koupit litrů mléka a kilogramů chleba za první a poslední srovnatelné období v dostupných datech cen a mezd?
+
+-- 114201	Mléko polotučné pasterované	1.0	l
+-- 111301	Chléb konzumní kmínový	1.0	kg
+
+SELECT *
+FROM czechia_price
+WHERE category_code = 114201
+ORDER BY date_from;
+-- from 2006-01-02 to 2006-01-08
+
+SELECT *
+FROM czechia_price
+WHERE category_code = 114201
+ORDER BY date_from DESC;
+-- from 2018-12-10 to 2018-12-16 
+
+SELECT *
+FROM czechia_price
+WHERE category_code = 111301
+ORDER BY date_from;
+-- from 2006-01-02 to 2006-01-08
+
+SELECT *
+FROM czechia_price
+WHERE category_code = 111301
+ORDER BY date_from DESC;
+-- from 2018-12-10 to 2018-12-16
+
+-- zajíma mě hodnota, která má v region code NULL - je to prumerna hodnota za vsechny regiony
+
+SELECT *
+FROM czechia_payroll cp 
+WHERE payroll_year = 2006 AND payroll_quarter = 1 AND industry_branch_code IS NULL AND value_type_code = 5958 AND calculation_code = 200;
+
+-- musím zjistit čtvrtletí z data u cen
+
+SELECT *,
+	QUARTER (date_from) AS date_quarter,
+	YEAR (date_from) AS date_year
+	FROM czechia_price
+	WHERE category_code IN (114201,111301) AND region_code IS NULL
+	ORDER BY date_from DESC;
+
+-- UPRAVA
+
+WITH srovnani AS (
+	SELECT *,
+	QUARTER (date_from) AS date_quarter,
+	YEAR (date_from) AS date_year
+	FROM czechia_price
+	WHERE category_code IN (114201,111301) AND region_code IS NULL
+	ORDER BY date_from DESC
+	)
+	SELECT *
+	
+	FROM srovnani
+	WHERE (date_year = (SELECT MAX(date_year) FROM srovnani) AND date_quarter = (SELECT MAX(DATE_quarter) FROM srovnani))
+		OR (date_year = (SELECT MIN(date_year) FROM srovnani) AND date_quarter = (SELECT MIN(DATE_quarter) FROM srovnani));
+
+	
+-- UPRAVA
+-- potrebuju sloupecek AVG_value_first a AVG_value_last
+-- AVG_value_first se vypocita - vem vsechny value s min date_year a min_quarter a udelej avg
+
+WITH srovnani AS (
+	SELECT *,
+	QUARTER (date_from) AS date_quarter,
+	YEAR (date_from) AS date_year
+	FROM czechia_price
+	WHERE category_code IN (114201,111301) AND region_code IS NULL
+	ORDER BY date_from DESC
+	)
+	SELECT *,
+	AVG(value) AS avg_value_first
+	FROM srovnani;
+	WHERE (date_year = (SELECT MAX(date_year) FROM srovnani) AND date_quarter = (SELECT MAX(DATE_quarter) FROM srovnani))
+		OR (date_year = (SELECT MIN(date_year) FROM srovnani) AND date_quarter = (SELECT MIN(DATE_quarter) FROM srovnani));	
+
+
+
+-- a pomocí toho naijonovat data mezd
+
+-- do tabulky musim dostat cenu, kod potraviny, nazev potraviny, datum, mzdu za odpovidajici obdobi a prepocet kolik si toho muzu koupit
+
+WITH srovnani AS (
+	SELECT *,
+	QUARTER (date_from) AS date_quarter,
+	YEAR (date_from) AS date_year
+	FROM czechia_price
+	WHERE category_code IN (114201,111301) AND region_code IS NULL AND
+((date_to = (SELECT MAX(date_to) FROM czechia_price)) OR (date_from = (SELECT MIN(date_from) FROM czechia_price)))
+	ORDER BY date_from DESC
+	)
+	SELECT
+	srovnani.value,
+	srovnani.category_code,
+	srovnani.date_quarter,
+	srovnani.date_year,
+	cpc.name,
+	cp.value
+	FROM srovnani
+	JOIN czechia_price_category cpc ON srovnani.category_code = cpc.code
+	LEFT JOIN czechia_payroll cp ON srovnani.date_quarter = cp.payroll_quarter AND srovnani.date_year = cp.payroll_year;
+	
+-- uprava
+
+WITH srovnani AS (
+	SELECT *,
+	QUARTER (date_from) AS date_quarter,
+	YEAR (date_from) AS date_year
+	FROM czechia_price
+	WHERE category_code IN (114201,111301) AND region_code IS NULL AND
+((date_to = (SELECT MAX(date_to) FROM czechia_price)) OR (date_from = (SELECT MIN(date_from) FROM czechia_price)))
+	ORDER BY date_from DESC
+	)
+	SELECT
+	srovnani.value AS price,
+	srovnani.category_code,
+	srovnani.date_quarter,
+	srovnani.date_year,
+	cpc.name,
+	cp.value AS salary,
+	cp.value/srovnani.value AS pocet
+	FROM srovnani
+	JOIN czechia_price_category cpc ON srovnani.category_code = cpc.code
+	LEFT JOIN czechia_payroll cp ON srovnani.date_quarter = cp.payroll_quarter AND srovnani.date_year = cp.payroll_year
+		WHERE value_type_code = 5958 AND unit_code = 200 AND calculation_code= 200 AND industry_branch_code IS NULL
+	ORDER BY srovnani.category_code, srovnani.date_year;
+
