@@ -1,0 +1,90 @@
+-- 3. Která kategorie potravin zdražuje nejpomaleji (je u ní nejnižší percentuální meziroční nárůst)?
+
+SELECT *,
+	YEAR (date_from) AS date_from_year
+	FROM czechia_price
+	WHERE region_code IS NULL
+	ORDER BY category_code, date_from;
+
+-- uprava
+WITH growth AS (
+	SELECT *,
+		YEAR (date_from) AS date_from_year,
+		AVG(value) AS avg_value
+		FROM czechia_price
+		WHERE region_code IS NULL
+		GROUP BY category_code, date_from_year
+	)
+	SELECT
+	category_code,
+	date_from_year,
+	avg_value,
+	LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) AS previous_year_value,
+	(avg_value - LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year)) / LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) * 100 AS year_over_year_growth
+	FROM growth
+	ORDER BY category_code, date_from_year;
+
+    -- uprava
+WITH growth AS (
+	SELECT *,
+		YEAR (date_from) AS date_from_year,
+		AVG(value) AS avg_value
+		FROM czechia_price
+		WHERE region_code IS NULL
+		GROUP BY category_code, date_from_year
+		HAVING date_from_year IN (2006, 2018)
+	)
+	SELECT
+	category_code,
+	czechia_price_category.name,
+	date_from_year,
+	avg_value,
+	(avg_value - LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year)) / LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) * 100 AS growth
+	FROM growth
+	LEFT JOIN czechia_price_category ON growth.category_code=czechia_price_category.code 
+	ORDER BY category_code, growth;
+
+
+-- vyber min a max roku v kazde kategorii (bez pouziti filtru jednotlivych roku)
+
+WITH growth AS (
+	SELECT *,
+		YEAR (date_from) AS date_from_year,
+		AVG(value) AS avg_value
+		FROM czechia_price
+		WHERE region_code IS NULL
+		GROUP BY category_code, date_from_year
+		HAVING date_from_year = (SELECT MIN(YEAR(date_from)) FROM czechia_price) OR date_from_year = (SELECT MAX(YEAR(date_from)) FROM czechia_price)
+	)
+	SELECT
+	category_code,
+	czechia_price_category.name,
+	date_from_year,
+	avg_value,
+	(avg_value - LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year)) / LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) * 100 AS growth
+	FROM growth
+	LEFT JOIN czechia_price_category ON growth.category_code=czechia_price_category.code
+	ORDER BY growth;
+
+-- uprava
+WITH growth AS (
+	SELECT *,
+		YEAR (date_from) AS date_from_year,
+		AVG(value) AS avg_value
+		FROM czechia_price
+		WHERE region_code IS NULL
+		GROUP BY category_code, date_from_year
+		HAVING date_from_year = (SELECT MIN(YEAR(date_from)) FROM czechia_price) OR date_from_year = (SELECT MAX(YEAR(date_from)) FROM czechia_price)
+	)
+	SELECT
+	category_code,
+	czechia_price_category.name,
+	date_from_year,
+	avg_value,
+	LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) AS first_year_value,
+	(avg_value - LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year)) / LAG(avg_value, 1) OVER (PARTITION BY category_code ORDER BY category_code, date_from_year) * 100 AS over_year_growth
+	FROM growth
+	LEFT JOIN czechia_price_category ON growth.category_code=czechia_price_category.code
+	ORDER BY over_year_growth IS NULL, over_year_growth;
+
+
