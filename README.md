@@ -2,4 +2,4 @@
 Sql projekt z kurzu datové akademie
 
 # Discord
-sarka_vy
+sarka.vy
